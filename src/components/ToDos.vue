@@ -1,79 +1,100 @@
 <script setup>
-import { ref, computed } from "vue"
+import { ref, inject } from "vue"
+import ToDoItemForm from "./ToDoItemForm.vue"
+import TodoSummary from "./ToDoSummary.vue"
+import ToDoList from "./ToDoList.vue"
+import TodoFilter from "./ToDoFilter.vue";
+import todoService from "../services/todo"
 
 const
-  _todo_text = ref(""),
-  _todo_list = ref([]),
-  _pending = computed(() => {
-    return _todo_list.value.filter(item => !item.checked)
-  }),
-  _done = computed(() => {
-    return _todo_list.value.filter(item => item.checked)
-  })
+  $modals = inject("$modals"),
+  _items = ref([]),
+  _item = ref(todoService.getDefault()),
+  _filter = ref("")
 
-function clearToDo() {
-  _todo_text.value = ""
+// Shows a modal to create or edit a to-do item
+function showModal(new_item = true, item = {}) {
+  if (new_item) {
+    // Prepare a new item
+    _item.value = todoService.getDefault()
+  } else {
+    // Make a copy of the item for editing
+    _item.value = todoService.makeCopy(item);
+  }
+
+  // todo Open the modal
+  $modals.show("newEditItem").then(() => {
+    // confirm
+    if (new_item) {
+      // insert the item
+      _item.value.id = _items.value.length + 1
+      _items.value.push(_item.value)
+    } else {
+      // update the item
+      let index = getIndex(item)
+      if (index >= 0) {
+        _items.value[index] = _item.value
+      } else {
+        alert("Error updating the item")
+      }
+    }
+  }, () => {
+    console.log(`${new_item ? "Item new" : "Item modification"} `, "canceled")
+  })
 }
 
-function addToDo() {
-  if (_todo_text.value != "") {
-    _todo_list.value.push({ id: _todo_list.value.length + 1, text: _todo_text.value, checked: false })
-    clearToDo()
+function deleteItem(item) {
+  // todo Delete the item
+  $modals.show("deleteItem").then(() => {
+    let index = getIndex(item);
+    if (index >= 0) {
+      _items.value.splice(index, 1)
+    }
+  }, () => { console.log("deletion canceled") })
+}
+
+function getIndex(item) {
+  let index = _items.value.findIndex(it => {
+    return it.id == item.id
+  })
+  if (index == -1) {
+    return false
+  } else {
+    return index
   }
 }
 
+function toggleStatus(item) {
+  item.status = todoService.toggleStatus(item.status)
+}
 </script>
 
 <template>
   <div>
+    <!-- Summary -->
+    <TodoSummary :items="_items"></TodoSummary>
+    <!-- Filter v-model双向绑定 -->
+    <TodoFilter v-model="_filter"></TodoFilter>
 
-    <!-- Simple header -->
-    <header>
-      <h1>
-        <i class="fa-solid fa-clipboard-list"></i>
-        To-Do List
-      </h1>
-    </header>
+    <!-- List -->
+    <ToDoList v-model="_items" :filter="_filter" @toggle="toggleStatus" @delete="deleteItem"
+      @edit="showModal(false, $event)">
+      <a role="button" class="contrast" @click="showModal(true)">
+        <i class="fa-solid fa-square-plus"></i>
+        New item
+      </a>
+    </ToDoList>
 
-    <main>
-      <!-- User input -->
-      <div>
-        <div role="group">
-          <input type="text" autofocus v-model="_todo_text" @keyup.enter="addToDo()"
-            placeholder="Type here your to-do item...">
-          <button @click="clearToDo()">
-            <i class="fa-solid fa-times"></i>
-          </button>
-          <button @click="addToDo()">
-            <i class="fa-solid fa-plus"></i>
-          </button>
-        </div>
-      </div>
-
-      <!-- List of pending items -->
-      <div>Pending ({{ _pending.length }})</div>
-      <div v-for="todo in _pending" :key="todo.id">
-        <label>
-          <input type="checkbox" v-model="todo.checked">
-          <span>
-            {{ todo.text }}
-          </span>
-        </label>
-      </div>
-      <div v-show="_pending.length == 0">No tasks</div>
-
-      <!-- List of completed tasks -->
-      <div>Completed ({{ _done.length }})</div>
-      <div v-for="todo in _done" :key="todo.id">
-        <label>
-          <input type="checkbox" v-model="todo.checked">
-          <span>
-            {{ todo.text }}
-          </span>
-        </label>
-      </div>
-      <div v-show="_done.length == 0">No tasks</div>
-    </main>
+    <!-- Modals-->
+    <Modal name="newEditItem" title="To Do Item">
+      <ToDoItemForm v-model="_item"></ToDoItemForm>
+    </Modal>
+    <Modal name="deleteItem" title="Delete To-Do Item">
+      <p>
+        Are you sure you want to delete this item?
+        <strong>{{ _item.text }}</strong>
+      </p>
+    </Modal>
   </div>
 </template>
 
