@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from "vue"
-import todoService from "../services/todo"
+import todoService from "../../services/todo"
 
 const $props = defineProps({
   modelValue: {

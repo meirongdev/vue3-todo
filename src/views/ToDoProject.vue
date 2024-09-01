@@ -1,16 +1,36 @@
 <script setup>
-import { ref, inject } from "vue"
-import ToDoItemForm from "./ToDoItemForm.vue"
-import TodoSummary from "./ToDoSummary.vue"
-import ToDoList from "./ToDoList.vue"
-import TodoFilter from "./ToDoFilter.vue";
+import { ref, inject, onMounted, watch } from "vue"
+import { useRouter } from 'vue-router'
+import ToDoItemForm from "../components/todos/ToDoItemForm.vue"
+import TodoSummary from "../components/todos/ToDoSummary.vue"
+import ToDoList from "../components/todos/ToDoList.vue"
+import TodoFilter from "../components/todos/ToDoFilter.vue";
 import todoService from "../services/todo"
+import eventBus from "../services/eventBus"
 
 const
+  $props = defineProps(['id']),
   $modals = inject("$modals"),
+  $router = useRouter(),
   _items = ref([]),
   _item = ref(todoService.getDefault()),
-  _filter = ref("")
+  _filter = ref(""),
+  _project_name = ref("")
+
+onMounted(loadProject)
+
+watch(() => $props.id, loadProject)
+
+function loadProject() {
+  // Project name
+  _project_name.value = todoService.getProjectName($props.id)
+  // Items
+  _items.value = todoService.loadProject($props.id)
+}
+
+function saveProject() {
+  todoService.saveProject($props.id, _items.value)
+}
 
 // Shows a modal to create or edit a to-do item
 function showModal(new_item = true, item = {}) {
@@ -38,6 +58,7 @@ function showModal(new_item = true, item = {}) {
         alert("Error updating the item")
       }
     }
+    saveProject()
   }, () => {
     console.log(`${new_item ? "Item new" : "Item modification"} `, "canceled")
   })
@@ -49,8 +70,17 @@ function deleteItem(item) {
     let index = getIndex(item);
     if (index >= 0) {
       _items.value.splice(index, 1)
+      saveProject()
     }
   }, () => { console.log("deletion canceled") })
+}
+
+function deleteProject() {
+  $modals.show("deleteProject").then(() => {
+    todoService.deleteProject($props.id);
+    eventBus.emit("projects:updated");
+    $router.push({ name: "landing" });
+  }, () => { })
 }
 
 function getIndex(item) {
@@ -66,11 +96,18 @@ function getIndex(item) {
 
 function toggleStatus(item) {
   item.status = todoService.toggleStatus(item.status)
+  saveProject()
 }
 </script>
 
 <template>
   <div>
+    <!-- Project name -->
+    <div class="grid">
+      <h1>{{ _project_name }}</h1>
+      <button @click="deleteProject">Delete project</button>
+    </div>
+
     <!-- Summary -->
     <TodoSummary :items="_items"></TodoSummary>
     <!-- Filter v-model双向绑定 -->
@@ -93,6 +130,13 @@ function toggleStatus(item) {
       <p>
         Are you sure you want to delete this item?
         <strong>{{ _item.text }}</strong>
+      </p>
+    </Modal>
+
+    <Modal name="deleteProject" title="Delete the project">
+      <h3>Attention</h3>
+      <p>
+        Are you sure you want to delete this project?
       </p>
     </Modal>
   </div>
